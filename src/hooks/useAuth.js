@@ -19,34 +19,9 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        if (firebaseUser.isAnonymous) {
-          setAuthError(null);
-          setUser({
-            uid: firebaseUser.uid,
-            email: 'dev@g.cjc.edu.ph',
-            displayName: 'Dev Mode User',
-            isAnonymous: true,
-          });
-        } else {
-          const email = firebaseUser.email || '';
-          if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-            // Not a CJC email — kick them out
-            await firebaseSignOut(auth);
-            setAuthError(`Only @${ALLOWED_DOMAIN} accounts are allowed.`);
-            setUser(null);
-          } else {
-            setAuthError(null);
-            setUser(firebaseUser);
-          }
-        }
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-    return unsub;
+    // TEMPORARY BYPASS: Firebase disabled for now to prevent infinite loading
+    // on Vercel without valid API keys. We immediately resolve the loading state.
+    setLoading(false);
   }, []);
 
   const signIn = async () => {
