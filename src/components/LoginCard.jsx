@@ -8,20 +8,16 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
   const videoRef = useRef(null);
 
   function intercept() {
-    setRickrolling(true);
-  }
-
-  useEffect(() => {
-    if (!rickrolling) return;
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
     }
-    const timer = setTimeout(() => {
-      setRickrolling(false);
-    }, 7000);
-    return () => clearTimeout(timer);
-  }, [rickrolling]);
+    setRickrolling(true);
+  }
+
+  function handleVideoEnd() {
+    setRickrolling(false);
+  }
 
   return (
     <div className="login-card">
@@ -49,6 +45,7 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
 
       <p className="login-hint">Only @g.cjc.edu.ph emails are allowed</p>
 
+      {/* Rickroll overlay — only the backdrop is conditional; video stays in DOM to preload */}
       {rickrolling && (
         <div style={{
           position: 'fixed', inset: 0,
@@ -58,17 +55,29 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 20,
-        }}>
-          <video
-            ref={videoRef}
-            src="/rickroll.mp4"
-            autoPlay
-            playsInline
-            style={{ width: '100%', maxWidth: 480, borderRadius: 12, boxShadow: '0 0 60px rgba(255,80,80,0.4)' }}
-          />
-        </div>
+        }} />
       )}
+
+      {/* Video is ALWAYS rendered (hidden) so the browser buffers it in the background */}
+      <video
+        ref={videoRef}
+        src="/rickroll.mp4"
+        playsInline
+        preload="auto"
+        onEnded={handleVideoEnd}
+        style={{
+          position: 'fixed',
+          zIndex: 10000,
+          width: '100%',
+          maxWidth: 480,
+          borderRadius: 12,
+          boxShadow: '0 0 60px rgba(255,80,80,0.4)',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          display: rickrolling ? 'block' : 'none',
+        }}
+      />
 
       <style jsx>{`
         .login-card {
