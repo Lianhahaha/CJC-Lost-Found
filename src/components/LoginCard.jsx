@@ -55,21 +55,17 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
 
       <p className="login-hint">Only @g.cjc.edu.ph emails are allowed</p>
 
-      {/* Rickroll overlay — only the backdrop is conditional; video stays in DOM to preload */}
-      {rickrolling && (
-        <div style={{
-          position: 'fixed',
-          top: 0, right: 0, bottom: 0, left: 0,
-          background: 'rgba(0,0,0,0.92)',
-          zIndex: 9999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }} />
-      )}
+      {/* Rickroll overlay + video — both use visibility+pointer-events instead of display:none
+          so the hidden video cannot intercept touch events on mobile WebViews */}
+      <div style={{
+        position: 'fixed',
+        top: 0, right: 0, bottom: 0, left: 0,
+        background: 'rgba(0,0,0,0.92)',
+        zIndex: 9999,
+        visibility: rickrolling ? 'visible' : 'hidden',
+        pointerEvents: rickrolling ? 'auto' : 'none',
+      }} />
 
-      {/* Video is ALWAYS rendered (hidden) so the browser buffers it in the background */}
       <video
         ref={videoRef}
         src={rickrollBase64}
@@ -82,11 +78,12 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
           width: '100%',
           maxWidth: 480,
           borderRadius: 12,
-          boxShadow: '0 0 60px rgba(255,80,80,0.4)',
+          boxShadow: rickrolling ? '0 0 60px rgba(255,80,80,0.4)' : 'none',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          display: rickrolling ? 'block' : 'none',
+          visibility: rickrolling ? 'visible' : 'hidden',
+          pointerEvents: 'none',
         }}
       />
 
