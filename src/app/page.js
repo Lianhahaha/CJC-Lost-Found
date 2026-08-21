@@ -1,66 +1,176 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+import { useState, useEffect, useMemo } from 'react';
+import ItemCard from '@/components/ItemCard';
+import { getFoundItems, getLostAlerts } from '@/lib/firestore';
+import Link from 'next/link';
 
-export default function Home() {
+const CATEGORIES = ['all', 'Electronics', 'Clothing', 'IDs & Cards', 'Books', 'Accessories', 'Others'];
+const STATUSES   = ['all', 'found', 'claimed'];
+
+export default function HomePage() {
+  const [tab, setTab]             = useState('found');
+  const [foundItems, setFoundItems] = useState([]);
+  const [lostAlerts, setLostAlerts] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
+  const [category, setCategory]   = useState('all');
+  const [status, setStatus]       = useState('all');
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([getFoundItems(), getLostAlerts()])
+      .then(([found, lost]) => { setFoundItems(found); setLostAlerts(lost); })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredFound = useMemo(() =>
+    foundItems.filter((item) => {
+      const q = search.toLowerCase();
+      return (
+        (!q || item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q) || item.locationFound?.toLowerCase().includes(q)) &&
+        (category === 'all' || item.category === category) &&
+        (status === 'all' || item.status === status)
+      );
+    }), [foundItems, search, category, status]);
+
+  const filteredLost = useMemo(() =>
+    lostAlerts.filter((item) => {
+      const q = search.toLowerCase();
+      return !q || item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q);
+    }), [lostAlerts, search]);
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      {/* ── GitHub-style page header ── */}
+      <div className="hero">
+        <div className="hero-inner">
+          <div className="hero-eyebrow">CJC Campus System</div>
+          <h1>Lost &amp; Found</h1>
+          <p>Help reunite belongings with their owners by posting or discovering lost items on campus.</p>
+
+          <div className="hero-actions">
+            <Link href="/post" className="btn btn-primary btn-lg">
+              + Report Found Item
+            </Link>
+            <Link href="/lost" className="btn btn-default btn-lg">
+              + Post Lost Alert
+            </Link>
+          </div>
+
+          <div className="hero-stats">
+            <div className="hero-stat">
+              <div className="stat-number">{foundItems.length}</div>
+              <div className="stat-label">Found Items</div>
+            </div>
+            <div className="hero-stat">
+              <div className="stat-number">{lostAlerts.length}</div>
+              <div className="stat-label">Lost Alerts</div>
+            </div>
+          </div>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </div>
+
+      <div className="page-wrapper">
+        {/* ── Tabs (GitHub underline style) ── */}
+        <div className="page-tabs">
+          <button
+            className={`page-tab${tab === 'found' ? ' active' : ''}`}
+            onClick={() => setTab('found')}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor" style={{ marginRight: 4, opacity: tab === 'found' ? 1 : 0.7 }}>
+              <path d="m11.28 3.22 4.25 4.25a1.5 1.5 0 0 1 0 2.12l-4.25 4.25a.75.75 0 0 1-1.06-1.06L14.19 8l-3.97-3.97a.75.75 0 0 1 1.06-1.06Zm-6.56 0a.75.75 0 1 1 1.06 1.06L1.81 8l3.97 3.97a.75.75 0 1 1-1.06 1.06L.47 8.81a1.5 1.5 0 0 1 0-2.12Z"></path>
+            </svg>
+            Found Items
+            {foundItems.length > 0 && (
+              <span className="tab-count">{foundItems.length}</span>
+            )}
+          </button>
+          <button
+            className={`page-tab${tab === 'lost' ? ' active' : ''}`}
+            onClick={() => setTab('lost')}
+          >
+            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor" style={{ marginRight: 4, opacity: tab === 'lost' ? 1 : 0.7 }}>
+              <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"></path>
+            </svg>
+            Lost Alerts
+            {lostAlerts.length > 0 && (
+              <span className="tab-count">{lostAlerts.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Filters ── */}
+        <div className="filters-bar">
+          <div className="search-input-wrap">
+            <span className="search-icon">🔍</span>
+            <input
+              className="search-input"
+              type="text"
+              placeholder={tab === 'found' ? 'Search found items…' : 'Search lost alerts…'}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
+
+          {tab === 'found' && (
+            <div className="filter-selects">
+              <div className="filter-group">
+                <span className="filter-label">Category</span>
+                <select 
+                  className="filter-select"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {CATEGORIES.map(c => (
+                    <option key={c} value={c}>{c === 'all' ? 'All Categories' : c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <span className="filter-label">Status</span>
+                <select 
+                  className="filter-select"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  {STATUSES.map(s => (
+                    <option key={s} value={s}>{s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
-      </main>
+
+        {/* ── Content ── */}
+        {loading ? (
+          <div className="loading-center"><div className="spinner" /></div>
+        ) : tab === 'found' ? (
+          filteredFound.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📭</div>
+              <h3>No items found</h3>
+              <p>Try adjusting your filters, or <Link href="/post">report a found item</Link>.</p>
+            </div>
+          ) : (
+            <div className="item-grid">
+              {filteredFound.map((item) => <ItemCard key={item.id} item={item} />)}
+            </div>
+          )
+        ) : filteredLost.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🔎</div>
+            <h3>No lost alerts</h3>
+            <p>Nobody has posted a lost item alert yet. <Link href="/lost">Post one</Link>.</p>
+          </div>
+        ) : (
+          <div className="item-grid">
+            {filteredLost.map((item) => <ItemCard key={item.id} item={item} />)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
