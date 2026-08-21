@@ -44,7 +44,10 @@
 
 /* ─── RESET ──────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html { 
+  scroll-behavior: smooth; 
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
@@ -853,4 +856,102 @@ img { display: block; max-width: 100%; }
   .filter-group     { flex: 1; }
   .filter-select    { width: 100%; min-width: unset; height: 30px; font-size: 12px; padding: 4px 28px 4px 8px; }
   .filter-label     { font-size: 10px; }
+}
+
+/* ─── LOGIN CARD ─────────────────────────────────────────── */
+.login-card {
+  background: var(--canvas-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  margin: 0 auto;
+}
+
+.login-logo {
+  margin-bottom: 24px;
+}
+
+.login-card h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--fg-default);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--fg-muted);
+  margin-bottom: 28px;
+}
+
+.login-loading {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Removed gap for older Android compat, using margin on icon instead */
+  width: 100%;
+  padding: 10px 20px;
+  background: var(--canvas-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--fg-default);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.google-btn:hover {
+  background: var(--border-muted);
+  border-color: var(--fg-subtle);
+}
+
+.google-icon {
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.login-hint {
+  font-size: 13px;
+  color: var(--fg-subtle);
+  margin-top: 20px;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 24px 16px;
+    border-radius: 12px;
+  }
+  .login-logo {
+    margin-bottom: 14px;
+  }
+  .login-logo img {
+    height: 52px !important;
+  }
+  .login-card h1 {
+    font-size: 17px;
+  }
+  .login-subtitle {
+    font-size: 12px;
+    margin-bottom: 18px;
+  }
+  .google-btn {
+    padding: 9px 16px;
+    font-size: 13px;
+  }
+  .login-hint {
+    font-size: 11px;
+    margin-top: 14px;
+  }
 }

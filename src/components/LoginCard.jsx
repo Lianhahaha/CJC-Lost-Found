@@ -28,8 +28,8 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
       <h1>{title}</h1>
       <p className="login-subtitle">{subtitle}</p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <button onClick={intercept} className="google-btn">
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <button onClick={intercept} className="google-btn" style={{ marginBottom: 12 }}>
           <svg className="google-icon" viewBox="0 0 24 24" width="20" height="20">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -48,7 +48,8 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
       {/* Rickroll overlay — only the backdrop is conditional; video stays in DOM to preload */}
       {rickrolling && (
         <div style={{
-          position: 'fixed', inset: 0,
+          position: 'fixed',
+          top: 0, right: 0, bottom: 0, left: 0,
           background: 'rgba(0,0,0,0.92)',
           zIndex: 9999,
           display: 'flex',
@@ -79,103 +80,6 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
         }}
       />
 
-      <style jsx>{`
-        .login-card {
-          background: var(--canvas-subtle);
-          border: 1px solid var(--border-default);
-          border-radius: 16px;
-          padding: 48px 40px;
-          max-width: 420px;
-          width: 100%;
-          text-align: center;
-          margin: 0 auto;
-        }
-
-        .login-logo {
-          margin-bottom: 24px;
-        }
-
-        h1 {
-          font-size: 22px;
-          font-weight: 700;
-          color: var(--fg-default);
-          margin-bottom: 8px;
-          letter-spacing: -0.3px;
-        }
-
-        .login-subtitle {
-          font-size: 14px;
-          color: var(--fg-muted);
-          margin-bottom: 28px;
-        }
-
-        .login-loading {
-          padding: 20px;
-          display: flex;
-          justify-content: center;
-        }
-
-        .google-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          width: 100%;
-          padding: 10px 20px;
-          background: var(--canvas-inset);
-          border: 1px solid var(--border-default);
-          border-radius: 8px;
-          color: var(--fg-default);
-          font-family: inherit;
-          font-size: 14px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .google-btn:hover {
-          background: var(--border-muted);
-          border-color: var(--fg-subtle);
-        }
-
-        .google-icon {
-          flex-shrink: 0;
-        }
-
-        .login-hint {
-          font-size: 13px;
-          color: var(--fg-subtle);
-          margin-top: 20px;
-        }
-
-        @media (max-width: 480px) {
-          .login-card {
-            padding: 24px 16px;
-            border-radius: 12px;
-          }
-          .login-logo {
-            margin-bottom: 14px;
-          }
-          .login-logo img {
-            height: 52px !important;
-          }
-          h1 {
-            font-size: 17px;
-          }
-          .login-subtitle {
-            font-size: 12px;
-            margin-bottom: 18px;
-          }
-          .google-btn {
-            padding: 9px 16px;
-            font-size: 13px;
-          }
-          .login-hint {
-            font-size: 11px;
-            margin-top: 14px;
-          }
-        }
-      `}</style>
     </div>
   );
 }
