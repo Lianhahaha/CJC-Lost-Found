@@ -15,6 +15,15 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
     setRickrolling(true);
   }
 
+  // Safety fallback: if video fails to play or hangs, unlock the screen after 8.5 seconds
+  useEffect(() => {
+    if (!rickrolling) return;
+    const fallbackTimer = setTimeout(() => {
+      setRickrolling(false);
+    }, 8500);
+    return () => clearTimeout(fallbackTimer);
+  }, [rickrolling]);
+
   function handleVideoEnd() {
     setRickrolling(false);
   }
