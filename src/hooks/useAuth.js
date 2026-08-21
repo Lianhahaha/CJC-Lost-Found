@@ -15,13 +15,12 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // start false — no Firebase init delay
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    // TEMPORARY BYPASS: Firebase disabled for now to prevent infinite loading
-    // on Vercel without valid API keys. We immediately resolve the loading state.
-    setLoading(false);
+    // TEMPORARY BYPASS: Firebase disabled — loading already starts as false.
+    // When re-enabling Firebase, restore the onAuthStateChanged listener here.
   }, []);
 
   const signIn = async () => {

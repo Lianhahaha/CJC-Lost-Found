@@ -12,17 +12,15 @@ export default function HomePage() {
   const [tab, setTab]             = useState('found');
   const [foundItems, setFoundItems] = useState([]);
   const [lostAlerts, setLostAlerts] = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState('');
   const [category, setCategory]   = useState('all');
   const [status, setStatus]       = useState('all');
 
   useEffect(() => {
-    setLoading(true);
     Promise.all([getFoundItems(), getLostAlerts()])
       .then(([found, lost]) => { setFoundItems(found); setLostAlerts(lost); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(console.error);
   }, []);
 
   const filteredFound = useMemo(() =>
