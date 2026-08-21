@@ -14,6 +14,13 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// Guard: skip all Firestore calls if Firebase is not configured yet.
+// This prevents the page from hanging on placeholder API keys.
+const isFirebaseReady = () => {
+  const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  return key && key !== 'your_api_key_here' && key !== 'placeholder';
+};
+
 // ── FOUND ITEMS ──────────────────────────────────────────────
 export async function createFoundItem(data) {
   const ref = await addDoc(collection(db, 'foundItems'), {
@@ -26,6 +33,7 @@ export async function createFoundItem(data) {
 }
 
 export async function getFoundItems({ category, status } = {}) {
+  if (!isFirebaseReady()) return [];
   let q = query(collection(db, 'foundItems'), orderBy('createdAt', 'desc'));
   if (category && category !== 'all') {
     q = query(collection(db, 'foundItems'), where('category', '==', category), orderBy('createdAt', 'desc'));
@@ -63,6 +71,7 @@ export async function createLostAlert(data) {
 }
 
 export async function getLostAlerts() {
+  if (!isFirebaseReady()) return [];
   const q = query(collection(db, 'lostAlerts'), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
