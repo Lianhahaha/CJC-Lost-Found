@@ -1,6 +1,7 @@
 'use client';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useRef, useEffect } from 'react';
+import { rickrollBase64 } from '@/lib/rickrollBase64';
 
 export default function LoginCard({ title = "Welcome to CJC Lost & Found", subtitle = "Sign in with your institutional Google account" }) {
   const { signIn, signInAsDev, loading } = useAuth();
@@ -71,7 +72,7 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
       {/* Video is ALWAYS rendered (hidden) so the browser buffers it in the background */}
       <video
         ref={videoRef}
-        src="/rickroll.mp4"
+        src={rickrollBase64}
         playsInline
         preload="auto"
         onEnded={handleVideoEnd}
