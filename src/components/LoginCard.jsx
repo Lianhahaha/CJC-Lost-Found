@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 export default function LoginCard({ title = "Welcome to CJC Lost & Found", subtitle = "Sign in with your institutional Google account" }) {
   const { signIn, signInAsDev, loading } = useAuth();
   const [rickrolling, setRickrolling] = useState(false);
+  const videoRef = useRef(null);
 
   function intercept() {
     setRickrolling(true);
@@ -12,6 +13,10 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
 
   useEffect(() => {
     if (!rickrolling) return;
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
     const timer = setTimeout(() => {
       setRickrolling(false);
     }, 7000);
@@ -55,16 +60,13 @@ export default function LoginCard({ title = "Welcome to CJC Lost & Found", subti
           justifyContent: 'center',
           gap: 20,
         }}>
-          <iframe
-            width="100%"
-            height="315"
-            src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&controls=0"
-            title="Rickroll"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            style={{ maxWidth: 480, borderRadius: 12, boxShadow: '0 0 60px rgba(255,80,80,0.4)' }}
-          ></iframe>
+          <video
+            ref={videoRef}
+            src="/rickroll.mp4"
+            autoPlay
+            playsInline
+            style={{ width: '100%', maxWidth: 480, borderRadius: 12, boxShadow: '0 0 60px rgba(255,80,80,0.4)' }}
+          />
         </div>
       )}
 
