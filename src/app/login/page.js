@@ -1,57 +1,40 @@
 'use client';
-import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 import LoginCard from '@/components/LoginCard';
 
-export default function LoginPage() {
+function safeNext(value) {
+  // Only allow same-site relative paths
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
+}
+
+function LoginInner() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get('next'));
 
   useEffect(() => {
-    if (user && !loading) {
-      router.push('/');
-    }
-  }, [user, loading, router]);
+    if (user && !loading) router.replace(next);
+  }, [user, loading, router, next]);
 
   return (
-    <div className="login-page-container">
-      {!user && !loading ? (
-        <LoginCard />
-      ) : user ? (
-        <div style={{ textAlign: 'center', marginTop: '20vh' }}>
-          <p>Signed in as <strong>{user.email}</strong></p>
-          <button onClick={() => router.push('/')} className="btn btn-primary btn-lg" style={{ marginTop: 16 }}>
-            Go to Home
-          </button>
-        </div>
+    <div className="auth-wrap">
+      {loading || user ? (
+        <div className="center"><span className="spinner" /> <span style={{ marginLeft: 10 }}>Checking your session…</span></div>
       ) : (
-        <div className="loading-center"><div className="spinner" /></div>
+        <LoginCard />
       )}
-      
-      <style jsx>{`
-        .login-page-container {
-          min-height: calc(100vh - 62px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 32px 16px;
-          background: var(--canvas-default);
-        }
-        .loading-center {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: calc(100vh - 62px);
-        }
-        @media (max-width: 480px) {
-          .login-page-container {
-            padding: 20px 12px;
-            align-items: flex-start;
-            padding-top: 24px;
-          }
-        }
-      `}</style>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="auth-wrap"><span className="spinner" /></div>}>
+      <LoginInner />
+    </Suspense>
   );
 }

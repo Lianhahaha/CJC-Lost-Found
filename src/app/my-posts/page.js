@@ -1,262 +1,308 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { getFoundItems, getLostAlerts, updateFoundItem, deleteFoundItem, deleteLostAlert } from '@/lib/firestore';
+import { useToast } from '@/components/Toast';
+import {
+  getFoundItems, getLostAlerts, updateFoundItem, updateLostAlert,
+  deleteFoundItem, deleteLostAlert, getClaimsForItem, friendlyError,
+} from '@/lib/firestore';
 import { deleteItemImage } from '@/lib/storage';
 import LoginCard from '@/components/LoginCard';
+import { EmptyState, Field, Modal, Notice, StatusBadge } from '@/components/ui';
+import { CategoryIcon, IconBox, IconBell, IconPlus, IconPin, IconCalendar, IconTag, IconEdit, IconTrash, IconCheck, IconRefresh, IconHand } from '@/components/Icons';
+import { CATEGORIES, LIMITS, formatDate, daysLeft } from '@/lib/constants';
 
-function timeAgo(ts) {
-  if (!ts) return '—';
-  const date = ts.toDate ? ts.toDate() : new Date(ts);
-  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+function PostRow({ item, onChanged, onDelete }) {
+  const toast = useToast();
+  const isFound = item.kind === 'found';
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [claims, setClaims] = useState(null);
+  const [claimsOpen, setClaimsOpen] = useState(false);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+
+  const done = isFound ? item.status === 'claimed' : item.status === 'resolved';
+  const left = daysLeft(item.expiresAt);
+  const href = isFound ? `/items/${item.id}` : `/lost/${item.id}`;
+
+  function startEdit() {
+    setForm({
+      name: item.name || '',
+      category: item.category || '',
+      description: item.description || '',
+      location: (isFound ? item.locationFound : item.lastSeenLocation) || '',
+      contact: (isFound ? item.finderContact : item.contact) || '',
+    });
+    setEditing(true);
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.category) {
+      toast.error('Name and category are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const base = {
+        name: form.name.trim().slice(0, LIMITS.name),
+        category: form.category,
+        description: form.description.trim().slice(0, LIMITS.description),
+      };
+      if (isFound) {
+        await updateFoundItem(item.id, { ...base, locationFound: form.location.trim().slice(0, LIMITS.location), finderContact: form.contact.trim().slice(0, LIMITS.contact) });
+      } else {
+        await updateLostAlert(item.id, { ...base, lastSeenLocation: form.location.trim().slice(0, LIMITS.location), contact: form.contact.trim().slice(0, LIMITS.contact) });
+      }
+      toast.success('Post updated.');
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleStatus() {
+    setBusy(true);
+    try {
+      if (isFound) await updateFoundItem(item.id, { status: done ? 'found' : 'claimed' });
+      else await updateLostAlert(item.id, { status: done ? 'looking' : 'resolved' });
+      toast.success(done ? 'Post reopened.' : isFound ? 'Marked as returned. Nice work!' : 'Marked as recovered. Glad it turned up!');
+      onChanged();
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleClaims() {
+    if (claimsOpen) { setClaimsOpen(false); return; }
+    setClaimsOpen(true);
+    if (claims) return;
+    setClaimsLoading(true);
+    try {
+      setClaims(await getClaimsForItem(item.id));
+    } catch (err) {
+      toast.error(friendlyError(err));
+      setClaimsOpen(false);
+    } finally {
+      setClaimsLoading(false);
+    }
+  }
+
+  return (
+    <li className="list-item">
+      {item.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.imageUrl} alt="" className="thumb" loading="lazy" />
+      ) : (
+        <div className="thumb-empty"><CategoryIcon category={item.category} /></div>
+      )}
+
+      <div className="list-main">
+        <div className="row" style={{ gap: 10 }}>
+          <span className="list-title"><Link href={href}>{item.name}</Link></span>
+          <StatusBadge item={item} />
+        </div>
+        <div className="meta-row">
+          <span><IconTag /> {item.category}</span>
+          <span><IconPin /> {(isFound ? item.locationFound : item.lastSeenLocation) || 'No location'}</span>
+          <span><IconCalendar /> {formatDate(item.createdAt)}</span>
+          {left !== null && !done && <span>{left} day{left === 1 ? '' : 's'} left</span>}
+        </div>
+
+        {isFound && !editing && (
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="btn btn-gold btn-sm" onClick={toggleClaims} aria-expanded={claimsOpen}>
+              <IconHand /> {item.claimCount || 0} claim{item.claimCount === 1 ? '' : 's'} {claimsOpen ? '· hide' : '· view'}
+            </button>
+            {claimsOpen && (
+              <div className="claims">
+                {claimsLoading ? (
+                  <span className="row" style={{ color: 'var(--ink-3)', fontSize: 14 }}><span className="spinner" /> Loading claims…</span>
+                ) : !claims || claims.length === 0 ? (
+                  <p style={{ fontSize: 14, color: 'var(--ink-3)' }}>No claims yet. When someone says the item is theirs, their message shows here.</p>
+                ) : claims.map((c) => (
+                  <div className="claim" key={c.id}>
+                    <div className="claim-head">
+                      <b>{c.claimerName}</b>
+                      <small>{formatDate(c.createdAt)}</small>
+                    </div>
+                    <p>{c.proof}</p>
+                    <div className="contact">Contact: {c.contact || c.claimerEmail}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {editing && (
+          <form className="inline-edit" onSubmit={saveEdit}>
+            <Field label="Name" required>
+              {(a) => <input {...a} className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} maxLength={LIMITS.name} />}
+            </Field>
+            <Field label="Category" required>
+              {(a) => (
+                <select {...a} className="select" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              )}
+            </Field>
+            <Field label={isFound ? 'Where you found it' : 'Where you last had it'}>
+              {(a) => <input {...a} className="input" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} maxLength={LIMITS.location} />}
+            </Field>
+            <Field label="Description" count={`${form.description.length}/${LIMITS.description}`}>
+              {(a) => <textarea {...a} className="textarea" rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} maxLength={LIMITS.description} />}
+            </Field>
+            <Field label="Contact details">
+              {(a) => <input {...a} className="input" value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} maxLength={LIMITS.contact} />}
+            </Field>
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? <><span className="spinner" /> Saving…</> : 'Save changes'}</button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {!editing && (
+        <div className="list-actions">
+          <button type="button" className={`btn btn-sm ${done ? 'btn-secondary' : 'btn-primary'}`} onClick={toggleStatus} disabled={busy}>
+            {busy ? <span className="spinner" /> : done ? <IconRefresh /> : <IconCheck />}
+            {done ? 'Reopen' : isFound ? 'Mark returned' : 'Mark recovered'}
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={startEdit}><IconEdit /> Edit</button>
+          <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(item)}><IconTrash /> Delete</button>
+        </div>
+      )}
+    </li>
+  );
 }
 
 export default function MyPostsPage() {
-  const { user } = useAuth();
-  const router = useRouter();
-  const [foundPosts, setFoundPosts] = useState([]);
-  const [lostPosts, setLostPosts] = useState([]);
+  const { user, loading: authLoading } = useAuth();
+  const toast = useToast();
+  const [found, setFound] = useState([]);
+  const [lost, setLost] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [tab, setTab] = useState('found');
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function loadPosts() {
+  const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    setError('');
     try {
-      const [found, lost] = await Promise.all([getFoundItems(), getLostAlerts()]);
-      setFoundPosts(found.filter((i) => i.finderEmail === user.email));
-      setLostPosts(lost.filter((i) => i.posterEmail === user.email));
+      const [f, l] = await Promise.all([getFoundItems(), getLostAlerts()]);
+      setFound(f.filter((i) => i.finderEmail === user.email));
+      setLost(l.filter((i) => i.posterEmail === user.email));
     } catch (e) {
-      console.error(e);
+      setError(friendlyError(e));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }
+  }, [user]);
 
-  useEffect(() => { loadPosts(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
 
-  function startEdit(item) {
-    setEditingId(item.id);
-    setEditForm({
-      description: item.description || '',
-      locationFound: item.locationFound || item.lastSeenLocation || '',
-      contact: item.finderContact || item.contact || '',
-      status: item.status || 'found',
-    });
-  }
-
-  async function saveEdit(item) {
-    setSaving(true);
+  async function confirmDelete() {
+    const item = toDelete;
+    if (!item) return;
+    setDeleting(true);
     try {
-      const isFound = !!item.finderEmail;
-      if (isFound) {
-        await updateFoundItem(item.id, {
-          description: editForm.description,
-          locationFound: editForm.locationFound,
-          finderContact: editForm.contact,
-          status: editForm.status,
-        });
-      }
-      setEditingId(null);
-      await loadPosts();
-    } catch (e) {
-      alert(e.message);
-    }
-    setSaving(false);
-  }
-
-  async function handleDelete(item) {
-    try {
-      if (item.finderEmail) {
-        if (item.imagePath) await deleteItemImage(item.imagePath, item.imageSizeBytes);
+      if (item.kind === 'found') {
         await deleteFoundItem(item.id);
+        await deleteItemImage(item.imagePath, item.imageSizeBytes).catch(() => {});
       } else {
         await deleteLostAlert(item.id);
       }
-      setDeleteConfirm(null);
-      await loadPosts();
+      toast.success('Post deleted.');
+      setToDelete(null);
+      load();
     } catch (e) {
-      alert(e.message);
+      toast.error(friendlyError(e));
+    } finally {
+      setDeleting(false);
     }
   }
 
+  if (authLoading) return <div className="center"><span className="spinner" /></div>;
+
   if (!user) {
     return (
-      <div className="page-wrapper">
-        <div className="form-page" style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-          <LoginCard
-            title="Sign in to manage your posts"
-            subtitle="Only CJC students and staff can access this page."
-          />
-        </div>
+      <div className="auth-wrap">
+        <LoginCard title="Sign in to see your posts" subtitle="Your found reports, lost alerts and any claims people sent you live here." />
       </div>
     );
   }
 
-  const posts = tab === 'found' ? foundPosts : lostPosts;
+  const posts = tab === 'found' ? found : lost;
 
   return (
-    <div className="page-wrapper">
-      <div className="page-header">
+    <div className="container page">
+      <div className="page-head">
         <div>
-          <h1>My Posts</h1>
-          <p>Manage your found item reports and lost alerts.</p>
+          <h1 className="section-title">My posts</h1>
+          <p className="section-sub">Edit, close, or delete anything you posted. Claims from other students show under each found item.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Link href="/post" className="btn btn-default btn-sm">+ Report Found</Link>
-          <Link href="/lost" className="btn btn-default btn-sm">+ Upload</Link>
+        <div className="row">
+          <Link href="/post" className="btn btn-secondary btn-sm"><IconPlus /> Found item</Link>
+          <Link href="/lost" className="btn btn-secondary btn-sm"><IconPlus /> Lost alert</Link>
         </div>
       </div>
 
-      <div className="page-tabs">
-        <button className={`page-tab${tab === 'found' ? ' active' : ''}`} onClick={() => setTab('found')}>
-          Found Reports ({foundPosts.length})
+      <div className="tabs-underline" role="tablist" aria-label="Post type">
+        <button type="button" role="tab" aria-selected={tab === 'found'} onClick={() => setTab('found')}>
+          <IconBox /> Found items <span className="count">{found.length}</span>
         </button>
-        <button className={`page-tab${tab === 'lost' ? ' active' : ''}`} onClick={() => setTab('lost')}>
-          Lost Alerts ({lostPosts.length})
+        <button type="button" role="tab" aria-selected={tab === 'lost'} onClick={() => setTab('lost')}>
+          <IconBell /> Lost alerts <span className="count">{lost.length}</span>
         </button>
       </div>
 
-      {loading ? (
-        <div className="loading-center"><div className="spinner" /></div>
+      {error ? (
+        <Notice type="danger">{error} <button type="button" className="btn btn-secondary btn-sm" onClick={load} style={{ marginLeft: 8 }}>Retry</button></Notice>
+      ) : loading ? (
+        <div className="center"><span className="spinner" /></div>
       ) : posts.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">{tab === 'found' ? '📦' : '🔎'}</div>
-          <h3>No {tab === 'found' ? 'found reports' : 'lost alerts'} yet</h3>
-          <p>
-            {tab === 'found'
-              ? 'Find something on campus? Report it!'
-              : 'Lost something? Post an alert so others can help.'}
-          </p>
-        </div>
+        tab === 'found' ? (
+          <EmptyState icon={<IconBox />} title="You have not reported any found items" actions={<Link href="/post" className="btn btn-primary"><IconPlus /> Report a found item</Link>}>
+            Picked something up? Post it and the owner can claim it here.
+          </EmptyState>
+        ) : (
+          <EmptyState icon={<IconBell />} title="You have no lost alerts" actions={<Link href="/lost" className="btn btn-primary"><IconPlus /> Post a lost alert</Link>}>
+            Lost something? Post an alert so finders know who to contact.
+          </EmptyState>
+        )
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <ul className="list" style={{ listStyle: 'none' }}>
           {posts.map((item) => (
-            <div key={item.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ 
-                display: 'flex', 
-                gap: 20, 
-                padding: 20, 
-                alignItems: 'flex-start', 
-                flexWrap: 'wrap' 
-              }}>
-                {item.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    style={{ 
-                      width: 90, 
-                      height: 90, 
-                      objectFit: 'cover', 
-                      borderRadius: 8, 
-                      border: '1px solid var(--color-border-default)', 
-                      flexShrink: 0 
-                    }}
-                  />
-                )}
-                <div style={{ flex: 1, minWidth: 240 }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 10, 
-                    marginBottom: 6, 
-                    flexWrap: 'wrap' 
-                  }}>
-                    <Link href={tab === 'found' ? `/items/${item.id}` : '#'} style={{ 
-                      fontWeight: 700, 
-                      fontSize: 16, 
-                      color: 'var(--color-fg-default)',
-                      letterSpacing: '-0.3px'
-                    }}>
-                      {item.name}
-                    </Link>
-                    <span className={`badge ${item.status === 'found' ? 'badge-found' : item.status === 'claimed' ? 'badge-claimed' : 'badge-looking'}`}>
-                      {item.status === 'found' ? '● Found' : item.status === 'claimed' ? '✓ Claimed' : '? Looking'}
-                    </span>
-                  </div>
-                  <div style={{ 
-                    fontSize: 13, 
-                    color: 'var(--color-fg-muted)', 
-                    display: 'flex', 
-                    gap: 16, 
-                    flexWrap: 'wrap' 
-                  }}>
-                    <span>📁 {item.category}</span>
-                    <span>📍 {item.locationFound || item.lastSeenLocation || '—'}</span>
-                    <span>📅 {timeAgo(item.createdAt)}</span>
-                  </div>
-
-                  {editingId === item.id && (
-                    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div className="form-group">
-                        <label className="form-label">Description</label>
-                        <textarea className="form-textarea" rows={3} value={editForm.description}
-                          onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} />
-                      </div>
-                      {tab === 'found' && (
-                        <>
-                          <div className="form-group">
-                            <label className="form-label">Location</label>
-                            <input className="form-input" value={editForm.locationFound}
-                              onChange={(e) => setEditForm((f) => ({ ...f, locationFound: e.target.value }))} />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">Contact</label>
-                            <input className="form-input" value={editForm.contact}
-                              onChange={(e) => setEditForm((f) => ({ ...f, contact: e.target.value }))} />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">Status</label>
-                            <select className="form-select" value={editForm.status}
-                              onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}>
-                              <option value="found">Found</option>
-                              <option value="claimed">Claimed</option>
-                            </select>
-                          </div>
-                        </>
-                      )}
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-primary btn-sm" onClick={() => saveEdit(item)} disabled={saving}>
-                          {saving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button className="btn btn-default btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {editingId !== item.id && (
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button className="btn btn-default btn-sm" onClick={() => startEdit(item)}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(item)}>Delete</button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <PostRow key={item.id} item={item} onChanged={load} onDelete={setToDelete} />
           ))}
-        </div>
+        </ul>
       )}
 
-      {/* Delete Confirm Modal */}
-      {deleteConfirm && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setDeleteConfirm(null)}>
-          <div className="modal">
-            <div className="modal-title">Delete this post?</div>
-            <p className="modal-desc">
-              This will permanently delete <strong>{deleteConfirm.name}</strong> and its image (if any). This cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button className="btn btn-default" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>Delete</button>
-            </div>
+      {toDelete && (
+        <Modal title="Delete this post?" onClose={() => !deleting && setToDelete(null)}>
+          <p className="desc">
+            <b>{toDelete.name}</b> will be removed from the board{toDelete.imageUrl ? ' along with its photo' : ''}. This cannot be undone.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setToDelete(null)} disabled={deleting}>Keep it</button>
+            <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? <><span className="spinner" /> Deleting…</> : <><IconTrash /> Delete post</>}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

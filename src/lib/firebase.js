@@ -3,8 +3,18 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+/**
+ * True when real Firebase keys are present. When false the app still
+ * renders (empty lists, sign-in disabled) instead of hanging on
+ * placeholder credentials.
+ */
+export const isFirebaseConfigured =
+  !!apiKey && apiKey !== 'your_api_key_here' && apiKey !== 'placeholder';
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'placeholder',
+  apiKey: apiKey || 'placeholder',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'placeholder',
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'placeholder',
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'placeholder',

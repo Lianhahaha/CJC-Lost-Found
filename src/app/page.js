@@ -1,179 +1,204 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
-import ItemCard from '@/components/ItemCard';
-import { getFoundItems, getLostAlerts } from '@/lib/firestore';
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import Link from 'next/link';
-
-const CATEGORIES = ['all', 'Electronics', 'Clothing', 'IDs & Cards', 'Books', 'Accessories', 'Others'];
-const FOUND_STATUSES = ['all', 'found', 'claimed'];
-const LOST_STATUSES = ['all', 'looking', 'resolved'];
+import ItemCard from '@/components/ItemCard';
+import { EmptyState, Notice, SkeletonGrid } from '@/components/ui';
+import { IconSearch, IconClose, IconPlus, IconBell, IconBox, IconRefresh, IconCamera, IconHand, IconCheckCircle } from '@/components/Icons';
+import { getFoundItems, getLostAlerts, friendlyError } from '@/lib/firestore';
+import { CATEGORIES, FOUND_STATUS, LOST_STATUS } from '@/lib/constants';
 
 export default function HomePage() {
-  const [tab, setTab]             = useState('found');
-  const [foundItems, setFoundItems] = useState([]);
-  const [lostAlerts, setLostAlerts] = useState([]);
-  const [loading, setLoading]     = useState(false);
-  const [search, setSearch]       = useState('');
-  const [category, setCategory]   = useState('all');
-  const [status, setStatus]       = useState('all');
+  const [tab, setTab] = useState('found');
+  const [found, setFound] = useState([]);
+  const [lost, setLost] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+  const [status, setStatus] = useState('all');
+  const q = useDeferredValue(search.trim().toLowerCase());
 
-  useEffect(() => {
-    Promise.all([getFoundItems(), getLostAlerts()])
-      .then(([found, lost]) => { setFoundItems(found); setLostAlerts(lost); })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [f, l] = await Promise.all([getFoundItems(), getLostAlerts()]);
+      setFound(f);
+      setLost(l);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const filteredFound = useMemo(() =>
-    foundItems.filter((item) => {
-      const q = search.toLowerCase();
-      return (
-        (!q || item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q) || item.locationFound?.toLowerCase().includes(q)) &&
-        (category === 'all' || item.category === category) &&
-        (status === 'all' || item.status === status)
-      );
-    }), [foundItems, search, category, status]);
+  useEffect(() => { load(); }, [load]);
 
-  const filteredLost = useMemo(() =>
-    lostAlerts.filter((item) => {
-      const q = search.toLowerCase();
-      return (
-        (!q || item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q)) &&
-        (category === 'all' || item.category === category) &&
-        (status === 'all' || item.status === status)
-      );
-    }), [lostAlerts, search, category, status]);
+  const source = tab === 'found' ? found : lost;
+  const statuses = tab === 'found' ? FOUND_STATUS : LOST_STATUS;
 
-  const currentStatuses = tab === 'found' ? FOUND_STATUSES : LOST_STATUSES;
+  const results = useMemo(() => source.filter((item) => {
+    if (category !== 'all' && item.category !== category) return false;
+    if (status !== 'all' && item.status !== status) return false;
+    if (!q) return true;
+    const hay = [item.name, item.description, item.category, item.locationFound, item.lastSeenLocation]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  }), [source, category, status, q]);
+
+  function switchTab(next) {
+    setTab(next);
+    setStatus('all');
+  }
+
+  const filtersActive = q || category !== 'all' || status !== 'all';
 
   return (
-    <div>
-      {/* ── GitHub-style page header ── */}
-      <div className="hero">
-        <div className="hero-inner">
-          <div className="hero-eyebrow">CJC Campus System</div>
-          <h1>Lost &amp; Found</h1>
-          <p>Help reunite belongings with their owners by posting or discovering lost items on campus.</p>
-
-          <div className="hero-actions">
-            <Link href="/post" className="btn btn-primary btn-lg">
-              + Report Found Item
-            </Link>
-            <Link href="/lost" className="btn btn-default btn-lg">
-              + Post Lost Alert
-            </Link>
-          </div>
-
-          <div className="hero-stats">
-            <div className="hero-stat">
-              <div className="stat-number">{foundItems.length}</div>
-              <div className="stat-label">Found Items</div>
-            </div>
-            <div className="hero-stat">
-              <div className="stat-number">{lostAlerts.length}</div>
-              <div className="stat-label">Lost Alerts</div>
+    <>
+      <section className="hero">
+        <div className="container hero-inner">
+          <div>
+            <div className="eyebrow">Cor Jesu College · Campus service</div>
+            <h1>Lost something on campus? <em>Let&rsquo;s get it back.</em></h1>
+            <p className="lede">
+              Students and staff post what they found and what they lost. Browse the board, then contact the person directly.
+              No office queue, no paperwork.
+            </p>
+            <div className="hero-actions">
+              <Link href="/post" className="btn btn-primary btn-lg"><IconPlus /> Report a found item</Link>
+              <Link href="/lost" className="btn btn-secondary btn-lg"><IconBell /> Post a lost alert</Link>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="page-wrapper">
-        {/* ── Tabs (GitHub underline style) ── */}
-        <div className="page-tabs">
-          <button
-            className={`page-tab${tab === 'found' ? ' active' : ''}`}
-            onClick={() => { setTab('found'); setStatus('all'); }}
-          >
-            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor" style={{ marginRight: 4, opacity: tab === 'found' ? 1 : 0.7 }}>
-              <path d="m11.28 3.22 4.25 4.25a1.5 1.5 0 0 1 0 2.12l-4.25 4.25a.75.75 0 0 1-1.06-1.06L14.19 8l-3.97-3.97a.75.75 0 0 1 1.06-1.06Zm-6.56 0a.75.75 0 1 1 1.06 1.06L1.81 8l3.97 3.97a.75.75 0 1 1-1.06 1.06L.47 8.81a1.5 1.5 0 0 1 0-2.12Z"></path>
-            </svg>
-            Found Items
-            {foundItems.length > 0 && (
-              <span className="tab-count">{foundItems.length}</span>
-            )}
-          </button>
-          <button
-            className={`page-tab${tab === 'lost' ? ' active' : ''}`}
-            onClick={() => { setTab('lost'); setStatus('all'); }}
-          >
-            <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor" style={{ marginRight: 4, opacity: tab === 'lost' ? 1 : 0.7 }}>
-              <path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"></path>
-            </svg>
-            Lost Alerts
-            {lostAlerts.length > 0 && (
-              <span className="tab-count">{lostAlerts.length}</span>
-            )}
-          </button>
+          <aside className="hero-panel" aria-label="Board summary">
+            <div className="hero-stats">
+              <div className="stat">
+                <div className="stat-n">{loading ? '–' : found.filter((i) => i.status === 'found').length}</div>
+                <div className="stat-l">Items waiting for owners</div>
+              </div>
+              <div className="stat">
+                <div className="stat-n">{loading ? '–' : lost.filter((i) => i.status === 'looking').length}</div>
+                <div className="stat-l">People still looking</div>
+              </div>
+            </div>
+            <ol className="hero-steps">
+              <li><span className="step-n">1</span><span><b>Found something?</b> Post a photo and where you found it.</span></li>
+              <li><span className="step-n">2</span><span><b>Lost something?</b> Search the board or post an alert.</span></li>
+              <li><span className="step-n">3</span><span><b>Match?</b> Sign in to see contact details and arrange the hand-over.</span></li>
+            </ol>
+          </aside>
         </div>
+      </section>
 
-        {/* ── Filters ── */}
-        <div className="filters-bar">
-          <div className="search-input-wrap">
-            <span className="search-icon">🔍</span>
-            <input
-              className="search-input"
-              type="text"
-              placeholder={tab === 'found' ? 'Search found items…' : 'Search lost alerts…'}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      <section className="container page" aria-labelledby="board-title">
+        <h2 id="board-title" className="visually-hidden">Lost and found board</h2>
+
+        <div className="toolbar">
+          <div className="segmented" role="tablist" aria-label="Board type">
+            <button type="button" role="tab" aria-selected={tab === 'found'} onClick={() => switchTab('found')}>
+              <IconBox /> Found items <span className="count">{found.length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === 'lost'} onClick={() => switchTab('lost')}>
+              <IconBell /> Lost alerts <span className="count">{lost.length}</span>
+            </button>
           </div>
 
-          <div className="filter-selects">
-            <div className="filter-group">
-              <span className="filter-label">Category</span>
-              <select 
-                className="filter-select"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {CATEGORIES.map(c => (
-                  <option key={c} value={c}>{c === 'all' ? 'All Categories' : c}</option>
-                ))}
+          <div className="filters">
+            <div className="search">
+              <IconSearch />
+              <label htmlFor="search" className="visually-hidden">Search</label>
+              <input
+                id="search"
+                className="input"
+                type="search"
+                placeholder={tab === 'found' ? 'Search found items, e.g. wallet, umbrella…' : 'Search lost alerts…'}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" className="btn btn-ghost btn-icon btn-sm clear" onClick={() => setSearch('')} aria-label="Clear search">
+                  <IconClose />
+                </button>
+              )}
+            </div>
+            <div className="select-wrap">
+              <label className="label-sm" htmlFor="category">Category</label>
+              <select id="category" className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="all">All categories</option>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
-            <div className="filter-group">
-              <span className="filter-label">Status</span>
-              <select 
-                className="filter-select"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                {currentStatuses.map(s => (
-                  <option key={s} value={s}>{s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                ))}
+            <div className="select-wrap">
+              <label className="label-sm" htmlFor="status">Status</label>
+              <select id="status" className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="all">Any status</option>
+                {Object.entries(statuses).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
           </div>
         </div>
 
-        {/* ── Content ── */}
-        {loading ? (
-          <div className="loading-center"><div className="spinner" /></div>
-        ) : tab === 'found' ? (
-          filteredFound.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📭</div>
-              <h3>No items found</h3>
-              <p>Try adjusting your filters, or <Link href="/post">report a found item</Link>.</p>
-            </div>
+        {error ? (
+          <Notice type="danger">
+            {error}{' '}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={load} style={{ marginLeft: 8 }}><IconRefresh /> Retry</button>
+          </Notice>
+        ) : loading ? (
+          <SkeletonGrid />
+        ) : results.length === 0 ? (
+          filtersActive ? (
+            <EmptyState
+              icon={<IconSearch />}
+              title="Nothing matches those filters"
+              actions={<button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory('all'); setStatus('all'); }}>Clear filters</button>}
+            >
+              Try a broader search, or check the other tab.
+            </EmptyState>
+          ) : tab === 'found' ? (
+            <EmptyState
+              icon={<IconBox />}
+              title="No found items posted yet"
+              actions={<Link href="/post" className="btn btn-primary"><IconPlus /> Report a found item</Link>}
+            >
+              Picked something up on campus? Post it here so the owner can find it.
+            </EmptyState>
           ) : (
-            <div className="item-grid">
-              {filteredFound.map((item) => <ItemCard key={item.id} item={item} />)}
-            </div>
+            <EmptyState
+              icon={<IconBell />}
+              title="No lost alerts yet"
+              actions={<Link href="/lost" className="btn btn-primary"><IconPlus /> Post a lost alert</Link>}
+            >
+              Lost something? Post an alert so whoever finds it knows who to contact.
+            </EmptyState>
           )
-        ) : filteredLost.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">🔎</div>
-            <h3>No lost alerts</h3>
-            <p>Nobody has posted a lost item alert yet. <Link href="/lost">Post one</Link>.</p>
-          </div>
         ) : (
-          <div className="item-grid">
-            {filteredLost.map((item) => <ItemCard key={item.id} item={item} />)}
-          </div>
+          <>
+            <div className="results-line" aria-live="polite">
+              <span><b>{results.length}</b> {tab === 'found' ? 'found item' : 'lost alert'}{results.length === 1 ? '' : 's'}{filtersActive ? ' match' : ''}</span>
+              <span>Newest first</span>
+            </div>
+            <div className="grid">
+              {results.map((item) => <ItemCard key={item.id} item={item} />)}
+            </div>
+          </>
         )}
-      </div>
-    </div>
+
+        <div className="how" style={{ marginTop: 40 }}>
+          <div className="how-item">
+            <IconCamera />
+            <div><b>Photos help</b><span>A clear photo of a found item gets it claimed faster. Cover any ID numbers.</span></div>
+          </div>
+          <div className="how-item">
+            <IconHand />
+            <div><b>Prove it is yours</b><span>Claims ask for a detail only the owner knows, like a sticker or what is inside.</span></div>
+          </div>
+          <div className="how-item">
+            <IconCheckCircle />
+            <div><b>Close the loop</b><span>Once an item is returned, mark it in My posts so nobody else keeps asking.</span></div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

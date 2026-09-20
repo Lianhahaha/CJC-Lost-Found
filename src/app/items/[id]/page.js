@@ -1,210 +1,192 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { getFoundItem, updateFoundItem, createClaim } from '@/lib/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { getFoundItem, createClaim, hasUserClaimed, friendlyError } from '@/lib/firestore';
 import { useAuth } from '@/hooks/useAuth';
-
-function timeAgo(ts) {
-  if (!ts) return '—';
-  const date = ts.toDate ? ts.toDate() : new Date(ts);
-  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-}
+import { useToast } from '@/components/Toast';
+import { EmptyState, Field, Modal, Notice, StatusBadge } from '@/components/ui';
+import { CategoryIcon, IconArrowLeft, IconBox, IconHand, IconEdit } from '@/components/Icons';
+import { formatDate, daysLeft, LIMITS } from '@/lib/constants';
 
 function ClaimModal({ item, user, onClose, onClaimed }) {
   const [proof, setProof] = useState('');
   const [contact, setContact] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleSubmit(e) {
+  const proofError = !proof.trim() ? 'Describe something only the owner would know.' : proof.trim().length < 15 ? 'Add a bit more detail (at least 15 characters).' : '';
+
+  async function submit(e) {
     e.preventDefault();
-    if (!proof.trim()) { setError('Please describe how you can prove this is yours.'); return; }
-    setLoading(true);
+    setTouched(true);
+    if (proofError) return;
+    setSaving(true);
+    setError('');
     try {
       await createClaim(item.id, {
-        claimerName: user.displayName,
+        claimerName: user.displayName || user.email,
         claimerEmail: user.email,
-        proof,
-        contact,
+        claimerUid: user.uid,
+        proof: proof.trim().slice(0, LIMITS.proof),
+        contact: contact.trim().slice(0, LIMITS.contact),
       });
       onClaimed();
     } catch (err) {
-      setError(err.message);
+      setError(friendlyError(err));
+      setSaving(false);
     }
-    setLoading(false);
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title">Claim this item</div>
-        <p className="modal-desc">
-          Describe how you can prove this item is yours (color, brand, distinguishing marks, etc.).
-          The finder will be notified through their contact details.
-        </p>
-        {error && <div className="alert alert-danger">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-stack">
-            <div className="form-group">
-              <label className="form-label">Proof of ownership <span>*</span></label>
-              <textarea
-                className="form-textarea"
-                rows={4}
-                value={proof}
-                onChange={(e) => setProof(e.target.value)}
-                placeholder="e.g. It's a black wallet with a small tear on the left side, contains a CJC ID and a BDO card..."
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Your contact (optional)</label>
-              <input
-                className="form-input"
-                type="text"
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="FB: @yourname, 09XX-XXX-XXXX, etc."
-              />
-            </div>
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-default" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Submitting…</> : 'Submit Claim'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal title="This is mine" onClose={onClose}>
+      <p className="desc">
+        Tell <b>{item.finderName}</b> how you know this is yours. They will see your message in their posts and contact you to hand it over.
+      </p>
+      <form onSubmit={submit} noValidate className="stack" style={{ marginTop: 18 }}>
+        {error && <Notice type="danger">{error}</Notice>}
+        <Field label="Proof it is yours" required error={touched ? proofError : undefined} hint="A detail not visible in the photo: what is inside, a scratch, a sticker, the lock-screen photo." count={`${proof.length}/${LIMITS.proof}`}>
+          {(a) => <textarea {...a} className="textarea" rows={4} value={proof} onChange={(e) => setProof(e.target.value)} onBlur={() => setTouched(true)} maxLength={LIMITS.proof} placeholder="e.g. Brown wallet, has my CJC ID and a photo of my dog in the front pocket" autoFocus />}
+        </Field>
+        <Field label="Best way to reach you" optional hint={`If empty, the finder sees your email (${user.email}).`}>
+          {(a) => <input {...a} className="input" value={contact} onChange={(e) => setContact(e.target.value)} maxLength={LIMITS.contact} placeholder="e.g. Messenger: Juan Dela Cruz · 09XX XXX XXXX" />}
+        </Field>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? <><span className="spinner" /> Sending…</> : 'Send claim'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
 export default function ItemDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const toast = useToast();
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showClaim, setShowClaim] = useState(false);
-  const [claimed, setClaimed] = useState(false);
+  const [alreadyClaimed, setAlreadyClaimed] = useState(false);
 
-  useEffect(() => {
-    getFoundItem(id)
-      .then((data) => {
-        setItem(data);
-        if (data?.status === 'claimed') setClaimed(true);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getFoundItem(id);
+      setItem(data);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  if (loading) return <div className="loading-center"><div className="spinner" /></div>;
-  if (!item) return (
-    <div className="page-wrapper">
-      <div className="empty-state">
-        <div className="empty-icon">❓</div>
-        <h3>Item not found</h3>
-        <p>This item may have been removed or the link is invalid.</p>
-      </div>
-    </div>
-  );
+  useEffect(() => { load(); }, [load]);
 
-  const isOwner = user?.email === item.finderEmail;
+  useEffect(() => {
+    if (!user?.email || !item) return;
+    hasUserClaimed(item.id, user.email).then(setAlreadyClaimed).catch(() => {});
+  }, [user?.email, item]);
+
+  if (loading || authLoading) {
+    return <div className="center"><span className="spinner" /></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="container page">
+        <Notice type="danger">{error} <button type="button" className="btn btn-secondary btn-sm" onClick={load} style={{ marginLeft: 8 }}>Retry</button></Notice>
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="container page">
+        <EmptyState icon={<IconBox />} title="This item is no longer listed" actions={<Link href="/" className="btn btn-primary">Back to board</Link>}>
+          It may have been returned to its owner, deleted by the finder, or expired after 30 days.
+        </EmptyState>
+      </div>
+    );
+  }
+
+  const isOwner = user && (user.email === item.finderEmail);
+  const returned = item.status === 'claimed';
+  const left = daysLeft(item.expiresAt);
 
   return (
-    <div className="page-wrapper">
-      <div style={{ marginBottom: 24 }}>
-        <button className="btn btn-default btn-sm" onClick={() => router.back()}>← Back</button>
-      </div>
+    <div className="container page">
+      <Link href="/" className="back-link"><IconArrowLeft /> Back to board</Link>
 
-      <div className="detail-grid">
-        {/* Image */}
-        <div>
+      <div className="detail">
+        <div className="detail-media">
           {item.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.imageUrl} alt={item.name} className="detail-img" />
+            <img src={item.imageUrl} alt={`Photo of ${item.name}`} />
           ) : (
-            <div style={{
-              background: 'linear-gradient(135deg, var(--color-canvas-inset) 0%, var(--color-canvas-subtle) 100%)',
-              border: '1px solid var(--color-border-default)',
-              borderRadius: 'var(--radius-md)',
-              aspectRatio: '4/3',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 72,
-            }}>📦</div>
+            <div className="card-media-empty"><CategoryIcon category={item.category} /></div>
           )}
         </div>
 
-        {/* Details */}
-        <div className="detail-section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.5px' }}>{item.name}</h1>
-            <span className={`badge ${claimed ? 'badge-claimed' : 'badge-found'}`}>
-              {claimed ? '✓ Claimed' : '● Found'}
-            </span>
+        <div>
+          <div className="detail-title-row">
+            <h1>{item.name}</h1>
+            <StatusBadge item={item} />
           </div>
+          <p style={{ color: 'var(--ink-3)', marginTop: 8, fontSize: 14 }}>
+            Found item · posted {formatDate(item.createdAt)}
+            {left !== null && !returned ? ` · listed for ${left} more day${left === 1 ? '' : 's'}` : ''}
+          </p>
 
-          <div className="detail-field">
-            <label>Category</label>
-            <p>{item.category}</p>
-          </div>
+          <dl className="dl">
+            <div className="dl-row"><dt>Category</dt><dd>{item.category}</dd></div>
+            <div className="dl-row"><dt>Found at</dt><dd>{item.locationFound}</dd></div>
+            <div className="dl-row"><dt>Description</dt><dd>{item.description || 'No description added.'}</dd></div>
+            <div className="dl-row">
+              <dt>Finder</dt>
+              <dd>
+                {user ? (
+                  <div className="contact-box">
+                    <b>{item.finderName}</b>
+                    <span>{item.finderContact || item.finderEmail}</span>
+                  </div>
+                ) : (
+                  <Notice type="info">
+                    <Link href={`/login?next=/items/${item.id}`}>Sign in</Link> with your CJC account to see who found it and how to reach them.
+                  </Notice>
+                )}
+              </dd>
+            </div>
+          </dl>
 
-          <div className="detail-field">
-            <label>Description</label>
-            <p style={{ whiteSpace: 'pre-wrap' }}>{item.description || '—'}</p>
-          </div>
+          <div className="stack" style={{ marginTop: 20, '--gap': '12px' }}>
+            {returned && (
+              <Notice type="success">This item has been returned to its owner. If you believe it is yours too, contact the finder directly.</Notice>
+            )}
 
-          <div className="detail-field">
-            <label>Where it was found</label>
-            <p>📍 {item.locationFound}</p>
-          </div>
-
-          <div className="detail-field">
-            <label>Date found</label>
-            <p>{timeAgo(item.createdAt)}</p>
-          </div>
-
-          {/* Finder contact — only visible to signed-in CJC users */}
-          {user ? (
-            <div className="detail-field">
-              <label>Finder&apos;s contact</label>
-              <div style={{
-                background: 'var(--color-canvas-inset)',
-                border: '1px solid var(--color-border-default)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '14px 18px',
-                fontSize: 14,
-              }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{item.finderName}</div>
-                <div style={{ color: 'var(--color-fg-muted)' }}>{item.finderContact || item.finderEmail}</div>
+            {isOwner ? (
+              <div className="row">
+                <Link href="/my-posts" className="btn btn-secondary"><IconEdit /> Manage this post</Link>
+                {item.claimCount > 0 && <span className="chip">{item.claimCount} claim{item.claimCount === 1 ? '' : 's'} waiting</span>}
               </div>
-            </div>
-          ) : (
-            <div className="alert alert-info">
-              <strong>Sign in</strong> with your CJC account to see the finder&apos;s contact details.
-            </div>
-          )}
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
-            {user && !claimed && !isOwner && (
-              <button className="btn btn-primary" onClick={() => setShowClaim(true)}>
-                This is mine
-              </button>
-            )}
-            {isOwner && (
-              <button className="btn btn-default" onClick={() => router.push(`/my-posts`)}>
-                Edit my post
-              </button>
-            )}
+            ) : user && !returned ? (
+              alreadyClaimed ? (
+                <Notice type="info">You already sent a claim for this item. The finder will contact you if it matches.</Notice>
+              ) : (
+                <div className="row">
+                  <button type="button" className="btn btn-primary btn-lg" onClick={() => setShowClaim(true)}>
+                    <IconHand /> This is mine
+                  </button>
+                  <span style={{ fontSize: 14, color: 'var(--ink-3)' }}>You will be asked for a detail only the owner knows.</span>
+                </div>
+              )
+            ) : null}
           </div>
-
-          {claimed && (
-            <div className="alert alert-success">
-              ✓ This item has been claimed. If you think this is yours too, contact the finder directly.
-            </div>
-          )}
         </div>
       </div>
 
@@ -215,7 +197,9 @@ export default function ItemDetailPage() {
           onClose={() => setShowClaim(false)}
           onClaimed={() => {
             setShowClaim(false);
-            setClaimed(true);
+            setAlreadyClaimed(true);
+            setItem((i) => ({ ...i, claimCount: (i.claimCount || 0) + 1 }));
+            toast.success('Claim sent. The finder will reach out if it matches.');
           }}
         />
       )}

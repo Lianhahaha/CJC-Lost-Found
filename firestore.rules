@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Firestore security rules for CJC Lost & Found.
+// Deploy with: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('.*@g\\.cjc\\.edu\\.ph$');
+    }
+
+    function ownsFound(data) {
+      return signedIn() && data.finderEmail == request.auth.token.email;
+    }
+
+    function ownsLost(data) {
+      return signedIn() && data.posterEmail == request.auth.token.email;
+    }
+
+    function validText(value, max) {
+      return value is string && value.size() <= max;
+    }
+
+    match /foundItems/{id} {
+      allow read: if true;
+      allow create: if ownsFound(request.resource.data)
+        && validText(request.resource.data.name, 80)
+        && validText(request.resource.data.description, 600)
+        && validText(request.resource.data.locationFound, 120)
+        && request.resource.data.status == 'found';
+      allow update: if ownsFound(resource.data)
+        // owner may edit their own post
+        || (signedIn()
+          // any signed-in user may only bump claimCount (done by createClaim)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimCount']));
+      allow delete: if ownsFound(resource.data);
+    }
+
+    match /lostAlerts/{id} {
+      allow read: if true;
+      allow create: if ownsLost(request.resource.data)
+        && validText(request.resource.data.name, 80)
+        && validText(request.resource.data.description, 600)
+        && request.resource.data.status == 'looking';
+      allow update, delete: if ownsLost(resource.data);
+    }
+
+    match /claims/{id} {
+      // Claims are private: only the finder of the item and the claimer can read them.
+      allow read: if signedIn() && (
+        resource.data.claimerEmail == request.auth.token.email
+        || get(/databases/$(database)/documents/foundItems/$(resource.data.itemId)).data.finderEmail == request.auth.token.email
+      );
+      allow create: if signedIn()
+        && request.resource.data.claimerEmail == request.auth.token.email
+        && validText(request.resource.data.proof, 800);
+      allow delete: if signedIn()
+        && get(/databases/$(database)/documents/foundItems/$(resource.data.itemId)).data.finderEmail == request.auth.token.email;
+      allow update: if false;
+    }
+
+    match /meta/storage {
+      allow read: if true;
+      allow write: if signedIn()
+        && request.resource.data.keys().hasOnly(['usedBytes']);
+    }
+  }
+}

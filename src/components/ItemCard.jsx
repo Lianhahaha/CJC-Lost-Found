@@ -1,76 +1,32 @@
 'use client';
 import Link from 'next/link';
-
-const CATEGORY_ICONS = {
-  Electronics: '🔌',
-  Clothing: '👕',
-  'IDs & Cards': '🪪',
-  Books: '📚',
-  Accessories: '🎒',
-  Others: '📦',
-};
-
-function timeAgo(ts) {
-  if (!ts) return '';
-  const date = ts.toDate ? ts.toDate() : new Date(ts);
-  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
+import { timeAgo } from '@/lib/constants';
+import { StatusBadge } from './ui';
+import { CategoryIcon, IconPin, IconClock, IconTag } from './Icons';
 
 export default function ItemCard({ item }) {
-  const icon = CATEGORY_ICONS[item.category] || '📦';
+  const isLost = item.kind === 'lost';
+  const href = isLost ? `/lost/${item.id}` : `/items/${item.id}`;
+  const location = isLost ? item.lastSeenLocation : item.locationFound;
 
   return (
-    <Link href={`/items/${item.id}`} style={{ textDecoration: 'none' }}>
-      <div className="card">
+    <Link href={href} className="card" aria-label={`${item.name}, ${isLost ? 'lost alert' : 'found item'}`}>
+      <div className="card-media">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.imageUrl} alt={item.name} className="card-img" />
+          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
         ) : (
-          <div className="card-img-placeholder" style={{ fontSize: 32, opacity: 0.5 }}>{icon}</div>
+          <div className="card-media-empty"><CategoryIcon category={item.category} /></div>
         )}
-        <div className="card-body">
-          <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span
-              className={`badge ${
-                item.status === 'found'
-                  ? 'badge-found'
-                  : item.status === 'claimed'
-                  ? 'badge-claimed'
-                  : 'badge-looking'
-              }`}
-            >
-              {icon} {item.status === 'found' ? 'Found' : item.status === 'claimed' ? 'Claimed' : 'Lost'}
-            </span>
-          </div>
-          
-          <div className="card-title">{item.name}</div>
-          <div className="card-desc">{item.description || 'No description provided.'}</div>
-          
-          <div className="card-meta-grid">
-            <div className="card-meta-icon">
-              <span style={{ fontSize: 10 }}>📍</span> 
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-                {item.locationFound || item.lastSeenLocation || 'Unknown location'}
-              </span>
-            </div>
-            <div className="card-meta-icon">
-              <span style={{ fontSize: 10 }}>🗓</span> {timeAgo(item.createdAt)}
-            </div>
-          </div>
-        </div>
-        <div className="card-footer">
-          <div className="card-user">
-            <div className="card-user-avatar">
-              {(item.userEmail || item.contactInfo || '?').charAt(0).toUpperCase()}
-            </div>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
-              {item.userEmail ? item.userEmail.split('@')[0] : (item.contactInfo || 'Anonymous')}
-            </span>
-          </div>
+        <StatusBadge item={item} />
+      </div>
+      <div className="card-body">
+        <div className="card-title">{item.name}</div>
+        <div className="card-desc">{item.description || (isLost ? 'No description added.' : 'No description added.')}</div>
+        <div className="card-meta">
+          <span><IconTag /><span>{item.category || 'Uncategorised'}</span></span>
+          <span><IconPin /><span>{location || 'Location not given'}</span></span>
+          <span><IconClock /><span>{timeAgo(item.createdAt)}</span></span>
         </div>
       </div>
     </Link>

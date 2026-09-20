@@ -1,90 +1,113 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { IconMenu, IconClose, IconLogout, IconAlert } from './Icons';
+
+const LINKS = [
+  { href: '/', label: 'Browse' },
+  { href: '/post', label: 'Report found item' },
+  { href: '/lost', label: 'Post lost alert' },
+  { href: '/my-posts', label: 'My posts' },
+];
+
+function initials(user) {
+  const src = user?.displayName || user?.email || '?';
+  return src.trim().charAt(0).toUpperCase();
+}
 
 export default function Navbar() {
-  const { user, loading, signIn, signOut, authError } = useAuth();
+  const { user, loading, signOut, authError, clearAuthError } = useAuth();
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
-  const navLinks = [
-    { href: '/', label: 'Browse' },
-    { href: '/my-posts', label: 'My Posts' },
-  ];
+  // Close the mobile menu on navigation
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
   return (
-    <>
-      <nav className="navbar">
-        <div className="navbar-inner">
-          <Link href="/" className="navbar-logo">
-            <img src="/cjc-logo-transparent.png?v=2" alt="CJC Logo" style={{ height: 28, width: 'auto', display: 'block' }} />
-            <span className="logo-text">Lost &amp; Found</span>
-          </Link>
+    <header className="nav">
+      <div className="container nav-inner">
+        <Link href="/" className="nav-brand" aria-label="CJC Lost and Found home">
+          <img src="/cjc-logo-transparent.png" alt="" width="44" height="34" />
+          <span className="nav-brand-text">
+            <small>Cor Jesu College</small>
+            <span>Lost &amp; Found</span>
+          </span>
+        </Link>
 
-          <span className="navbar-divider">/</span>
+        <nav className="nav-links" aria-label="Primary">
+          {LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="nav-link" aria-current={isActive(l.href) ? 'page' : undefined}>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
 
-          <div className="navbar-links">
-            {navLinks.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`nav-link${pathname === l.href ? ' active' : ''}`}
-              >
-                {l.label}
-              </Link>
-            ))}
-          </div>
-
-          <div className="navbar-spacer" />
-
+        <div className="nav-actions">
           {loading ? (
-            <div className="spinner" style={{ width: 18, height: 18 }} />
+            <span className="spinner" aria-label="Checking sign-in" />
           ) : user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {user.photoURL && (
+            <div className="nav-user">
+              {user.photoURL ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.photoURL} alt="avatar" className="avatar" />
+                <img src={user.photoURL} alt="" className="avatar" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="avatar-fallback" aria-hidden="true">{initials(user)}</span>
               )}
-              <span style={{ 
-                fontSize: 13, 
-                color: 'var(--color-fg-muted)', 
-                maxWidth: 120, 
-                overflow: 'hidden', 
-                textOverflow: 'ellipsis', 
-                whiteSpace: 'nowrap',
-                display: 'none'
-              }} className="hide-mobile">
-                {user.displayName || user.email}
-              </span>
-              <button onClick={signOut} className="btn btn-default btn-sm">Sign out</button>
+              <span className="nav-user-name" title={user.email}>{user.displayName || user.email}</span>
+              <button type="button" onClick={signOut} className="btn btn-ghost btn-sm btn-signout">
+                <IconLogout /> Sign out
+              </button>
             </div>
           ) : (
-            <Link href="/login" className="btn btn-accent btn-sm">
-              Login
-            </Link>
+            <Link href="/login" className="btn btn-primary btn-sm">Sign in</Link>
           )}
 
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? <IconClose /> : <IconMenu />}
+          </button>
         </div>
-      </nav>
+      </div>
+
+      <div id="mobile-nav" className="nav-mobile" hidden={!open}>
+        <div className="container">
+          {LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="nav-link" aria-current={isActive(l.href) ? 'page' : undefined}>
+              {l.label}
+            </Link>
+          ))}
+          {user && (
+            <div className="nav-mobile-foot">
+              <span className="nav-user-name" style={{ display: 'block', maxWidth: '60%' }}>{user.displayName || user.email}</span>
+              <button type="button" onClick={signOut} className="btn btn-secondary btn-sm">
+                <IconLogout /> Sign out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {authError && (
-        <div className="container" style={{ marginTop: 16 }}>
-          <div className="alert alert-danger" style={{ marginBottom: 0 }}>
-            <strong>Authentication Error:</strong> {authError.includes('api-key-not-valid') ? 'Your Firebase API keys in .env.local are missing or invalid. Please check your setup.' : authError}
+        <div className="container" style={{ paddingTop: 12, paddingBottom: 12 }}>
+          <div className="notice notice-danger" role="alert">
+            <IconAlert />
+            <span style={{ flex: 1 }}>{authError}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={clearAuthError} aria-label="Dismiss">
+              <IconClose />
+            </button>
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .hide-mobile {
-          display: block;
-        }
-        @media (max-width: 768px) {
-          .hide-mobile {
-            display: none !important;
-          }
-        }
-      `}</style>
-    </>
+    </header>
   );
 }
